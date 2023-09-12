@@ -88,7 +88,7 @@
     "url": "https://github.com/JaguarJack/catch-admin-vue/issues"
   },
   "engines": {
-    "node": ">=8.9",
+    "node": ">16.14.0 <17",
     "npm": ">= 3.0.0"
   },
   "keywords": [
