@@ -1,3 +1,0 @@
-<el-form-item label="{label}" prop="{prop}">
-  <el-switch v-model="{model-value}" name="{prop}" />
-</el-form-item>

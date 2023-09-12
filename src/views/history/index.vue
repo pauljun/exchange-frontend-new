@@ -1,0 +1,264 @@
+<template>
+  <div class="app-container" v-loading="loading">
+    <div class="filter-container">
+      <el-row>
+        <el-col :span="12">
+          <el-form label-width="80px" :inline="true">
+            <el-form-item :label="$t('common.keyword')">
+              <el-input style="width: 100%" v-model="queryParam.email" />
+            </el-form-item>
+            <el-button
+              type="primary"
+              @click="handleSearch"
+              icon="el-icon-search"
+            >
+              {{ $t("User.Search") }}
+            </el-button>
+          </el-form>
+        </el-col>
+        <el-col :span="12">
+          <div class="his-wrapper">
+            <span class="mr-4" style="color: #ffb0b0">
+              {{ $t("history.TotalDeposit") }}:
+              <b>{{ formatPrice(info.dtUSD, 2) }} USDT</b>
+            </span>
+            <span class="mr-4" style="color: #00ffad">
+              {{ $t("history.ReceivedTotal") }}:
+              <b>{{ formatPrice(info.dtBNB, 10) }} BNB</b>
+            </span>
+            <span class="mr-4" style="color: #ffa500">
+              {{ $t("history.cost") }}:
+              <b>{{ formatPrice(info.feeBNB, 10) }} BNB</b>
+            </span>
+          </div>
+        </el-col>
+      </el-row>
+    </div>
+    <el-table
+      ref="multipleTable"
+      :data="data"
+      tooltip-effect="dark"
+      style="width: 100%"
+      border
+      fit
+      @selection-change="handleSelectMulti"
+    >
+      <el-table-column prop="email" :label="$t('Menu.Account')" align="center">
+        <template slot-scope="record">
+          {{ record.row.from_u }}<br />{{ $t("history.desc") }}:
+          {{ record.row.type }}
+        </template>
+      </el-table-column>
+      <el-table-column
+        prop="type"
+        :label="$t('history.CurrencyType')"
+        align="center"
+      />
+      <el-table-column
+        prop="account"
+        :label="$t('history.AmountMoney')"
+        align="center"
+      >
+        <template slot-scope="record">
+          {{ getAmountDecimal(record.row.currency, record.row.amount) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="note" :label="$t('history.note')" align="center" />
+      <el-table-column
+        prop="created_at"
+        :label="$t('history.created_at')"
+        align="center"
+      />
+      <el-table-column prop="status" :label="$t('User.Status')" align="center">
+        <template slot-scope="record">
+          <el-tag type="primary" effect="dark" v-if="record.row.status == 0">
+            {{ $t("history.Processing") }}
+          </el-tag>
+          <el-tag type="success" effect="dark" v-if="record.row.status == 1">
+            {{ $t("history.complete") }}
+          </el-tag>
+          <el-tag type="danger" effect="dark" v-if="record.row.status == -1">
+            {{ $t("history.refuse") }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column
+        :label="$t('common.operate')"
+        align="center"
+        width="200px"
+      >
+        <template slot-scope="record">
+          <el-tooltip
+            v-if="record.row.currency == 'vnd' && record.row.status === 0"
+            color="primary"
+            :content="$t('history.handle')"
+          >
+            <el-button
+              type="primary"
+              icon="el-icon-edit"
+              @click="handleUpdate(record.row)"
+            />
+          </el-tooltip>
+          <el-button
+            type="danger"
+            icon="el-icon-delete"
+            @click="handleDelete(record.row.id)"
+          />
+        </template>
+      </el-table-column>
+    </el-table>
+    <el-pagination
+      class="pagination-container"
+      background
+      @size-change="handleSizeChange"
+      @current-change="handleCurrentChange"
+      :current-page="paginate.current"
+      hide-on-single-page
+      :page-sizes="paginate.sizes"
+      :page-size="paginate.limit"
+      :layout="paginate.layout"
+      :total="paginate.total"
+    />
+    <!----------------------------------- 部门 ---------------------------------------------->
+    <el-dialog
+      :title="'Phê duyệt nạp tiền'"
+      :visible.sync="formVisible"
+      width="560px"
+      :close-on-click-modal="false"
+      @close="handleCancel"
+    >
+      <el-form
+        :ref="formName"
+        label-width="80px"
+        :model="formFieldsData"
+        :rules="rules"
+      >
+        <div class="p-6">
+          <div>
+            <h5>
+              Thông tin nạp tiền <b>{{ formFieldsData.from_u }}</b>
+            </h5>
+            <div>
+              <b>{{ $t("Login.Account") }}:</b> {{ formFieldsData.email }}
+            </div>
+            <div>
+              <b>{{ $t("history.AmountMoney") }}(VND):</b>
+              {{ formatPrice(formFieldsData.real_amount, 0) }}
+            </div>
+            <div>
+              <b>{{ $t("history.AmountMoney") }}(USD):</b>
+              {{ formatPrice(formFieldsData.amount, 0) }}
+            </div>
+            <div><b>Nội dung chuyển khoản:</b> {{ formFieldsData.bank }}</div>
+            <div>
+              <b>Thời gian yêu cầu nạp tiền:</b>
+              {{ formFieldsData.created_at }}
+            </div>
+          </div>
+        </div>
+        <el-form-item :label="$t('history.note')" prop="note">
+          <el-input v-model="formFieldsData.note" />
+        </el-form-item>
+        <el-button type="danger" @click="submitDataUpdateMoney(-1)">
+          {{ $t("history.refuse") }}
+        </el-button>
+        <el-button type="success" @click="submitDataUpdateMoney(1)">
+          Chấp nhận
+        </el-button>
+      </el-form>
+    </el-dialog>
+  </div>
+</template>
+<script>
+import formOperate from "@/layout/mixin/formOperate";
+
+export default {
+  mixins: [formOperate],
+  data() {
+    return {
+      formName: "domain_record",
+      defaultQueryParam: ["type"],
+      queryParam: {
+        email: "",
+        type: "Deposit",
+      },
+      info: {
+        dtUSD: 0,
+        dtBNB: 0,
+        feeBNB: 0,
+      },
+      formVisible: false,
+      formFieldsData: {
+        email: "",
+        from_u: "",
+        real_amount: "",
+        amount: "",
+        bank: "",
+      },
+      url: "/history/trade",
+      // 表单验证
+      rules: {
+        email: [{ required: true, message: "请输入邮箱", trigger: "blur" }],
+      },
+    };
+  },
+  mounted() {
+    /** 充值 */
+    this.$http.get("/history/trade_count?type=rn").then((res) => {
+      this.info = res;
+    });
+  },
+  methods: {
+    formatPrice(value, minimum) {
+      if (void 0 === value) value = 0;
+      var formatter = new Intl.NumberFormat("en-US", {
+        minimumFractionDigits: minimum,
+      });
+
+      return formatter.format(value);
+    },
+    getAmountDecimal(type, value) {
+      let cur = "$";
+      let coin = type.toUpperCase();
+      let minimum = 2;
+      if (coin == "BTC") minimum = 6;
+
+      if (coin == "ETH") minimum = 4;
+
+      if (coin == "USDT") minimum = 2;
+
+      if (coin == "VN") minimum = 0;
+
+      var formatter = new Intl.NumberFormat("en-US", {
+        //style: 'currency',
+        //currency: '',
+        minimumFractionDigits: minimum,
+      });
+
+      return cur + formatter.format(value);
+    },
+    submitDataUpdateMoney(status) {
+      this.formFieldsData.status = status;
+      this.handleSubmit();
+    },
+  },
+};
+</script>
+
+<style lang="scss">
+.his-wrapper {
+  padding: 10px 0;
+  text-align: right;
+}
+h5 {
+  margin: 0;
+  padding: 0;
+}
+.mr-4 {
+  margin-left: 30px;
+}
+.p-6 {
+  line-height: 32px;
+  font-size: 16px;
+}
+</style>
